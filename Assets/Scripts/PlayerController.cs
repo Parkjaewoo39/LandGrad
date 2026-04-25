@@ -3,29 +3,30 @@ using UnityEngine.InputSystem;
 
 public class PlayerController : MonoBehaviour
 {
-    private float moveSpeed = 1.0f;
-    private Vector2 moveInput;
+    private float moveSpeed = 10.0f;
+    private float turnSpeed = 200.0f;
+    private float turnInput;
+    private Rigidbody2D rb;
+
     public void Awake()
     {
-        moveInput = Vector2.zero;
+        rb = GetComponent<Rigidbody2D>();       
     }
 
 
-    public void OnMove(InputValue value)
+    public void OnMove(InputAction.CallbackContext context)
     {
-        moveInput = value.Get<Vector2>();
-    }
-    //}public void OnMove(InputAction.CallbackContext value)
-    //{
-    //    moveInput = value.ReadValue<Vector2>();
-       
-    //}
+        Vector2 moveInput = context.ReadValue<Vector2>();
 
-    void Update()
+        turnInput = moveInput.x;
+    }
+
+    private void FixedUpdate()
     {
-        Vector3 move = new Vector3(moveInput.x, moveInput.y, 0);
-        transform.position += move * moveSpeed * Time.deltaTime;
-        Debug.Log("되고있니" + moveInput);
+        rb.linearVelocity = transform.up * moveSpeed;
+
+        rb.MoveRotation(rb.rotation - turnInput * turnSpeed * Time.deltaTime);
     }
 
+   
 }
