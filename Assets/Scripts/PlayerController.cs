@@ -6,6 +6,10 @@ public class PlayerController : MonoBehaviour
     private float moveSpeed = 10.0f;
     private float turnSpeed = 200.0f;
     private float turnInput;
+
+    private Vector2 exitPoint;
+    private Vector2 enterPoint;
+
     private Rigidbody2D rb;
 
     public TerritoryManager territoryManager;
@@ -45,7 +49,10 @@ public class PlayerController : MonoBehaviour
             isInsideTerritory = false;
             isDrawingTrail = true;
 
+            exitPoint = transform.position;
+
             Debug.Log("영역 밖으로 나감");
+            Debug.Log("Exit Point:" + exitPoint);
         }
     }
 
@@ -56,7 +63,11 @@ public class PlayerController : MonoBehaviour
             // 밖에 있다가 다시 들어온 경우
             if (isDrawingTrail)
             {
-                territoryManager.CreateCapturedArea(trailManager.points);
+                enterPoint = transform.position;
+
+                Debug.Log("Enter Point:" + enterPoint);
+
+                territoryManager.CreateCapturedArea(trailManager.points, exitPoint, enterPoint);
 
                 trailManager.ClearTrail();
 
