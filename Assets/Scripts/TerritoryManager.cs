@@ -23,143 +23,208 @@ public class TerritoryManager : MonoBehaviour
         UpdateVisual();
 
         territoryCenter = polygonCollider.bounds.center;
-        Debug.Log("Territory Center:" + territoryCenter);
+        Debug.Log("Start Territory Created");
     }
 
+    /// <summary>
+    /// 시작 영역 생성
+    /// </summary>
     void CreateStartTerritory()
     {
         List<Vector2> points = new List<Vector2>();
 
         for (int i = 0; i < pointCount; i++)
         {
-            float angle = i * Mathf.PI * 2 / pointCount;
-
-            float randomRadius = baseRadius + Random.Range(-variance, variance);
+            float angle = i * Mathf.PI * 2f / pointCount;
+            float radius = baseRadius + Random.Range(-variance, variance);
 
             Vector2 point = new Vector2(
-                Mathf.Cos(angle) * randomRadius,
-                Mathf.Sin(angle) * randomRadius
+                Mathf.Cos(angle) * radius,
+                Mathf.Sin(angle) * radius
             );
 
             points.Add(point);
-           
         }
 
         polygonCollider.SetPath(0, points.ToArray());
 
+        // 시작 위치를 플레이어 기준으로
         transform.position = player.position;
     }
 
-    // Plugin Clipper2 사용 영역 복귀 시 새 영역 생성
-    public void CreateCapturedArea(List<Vector3> trailPoints, Vector2 exitPoint, Vector2 enterPoint)
+    /// <summary>
+    /// 핵심 방식 변경:
+    /// Trail 자체를 하나의 닫힌 Polygon으로 만들고
+    /// 기존 Territory와 Union
+    /// </summary>
+    public void CreateCapturedArea(
+        List<Vector3> trailPoints,
+        Vector2 exitPoint,
+        Vector2 enterPoint)
     {
-        if (trailPoints == null || trailPoints.Count < 3)
+        if (trailPoints == null || trailPoints.Count < 2)
+        {
+            Debug.LogWarning("Trail 부족");
             return;
+        }
 
-        // 기존 Territory 경로 가져오기
         Vector2[] currentPath = polygonCollider.GetPath(0);
 
-        int exitIndex = FindClosestPointIndex(currentPath, exitPoint);
+        if (currentPath == null || currentPath.Length < 3)
+        {
+            Debug.LogWarning("기존 Territory 이상");
+            return;
+        }
 
-        int enterIndex = FindClosestPointIndex(currentPath, enterPoint);
-
-        List<Vector2> boundaryCW = GetBoundarySegmentCW(currentPath, exitIndex, enterIndex);
-
-        List<Vector2> boundaryCCW = GetBoundarySegmentCCW(currentPath, exitIndex, enterIndex);
-
-        List<Vector2> selectedBoundary = boundaryCW.Count < boundaryCCW.Count ? boundaryCW : boundaryCCW;
-
-        Debug.Log("CW Count: " + boundaryCW.Count);
-        Debug.Log("CCW Count: " + boundaryCCW.Count);
-        Debug.Log("Selected Count: " + selectedBoundary.Count);
-
-
-        Debug.Log("ExitPoint:" + exitPoint);
-        Debug.Log("EnterPoint:" + enterPoint);
-
-        List<Vector2> boundarySegment = GetBoundarySegment(currentPath, exitIndex, enterIndex);
-
-        Debug.Log("Boundary Count: " + boundarySegment.Count);
+        //--------------------------------------------------
+        // 1. 기존 Territory → World 좌표
+        //--------------------------------------------------
 
         PathD territoryPath = new PathD();
 
         foreach (Vector2 p in currentPath)
         {
-            // local → world 좌표 변환
-            Vector2 worldPoint = (Vector2)transform.position + p;
+            Vector2 worldPoint =
+                (Vector2)transform.position + p;
 
-            territoryPath.Add(new PointD(worldPoint.x, worldPoint.y));
+            territoryPath.Add(
+                new PointD(worldPoint.x, worldPoint.y)
+            );
         }
 
-        // Trail 경로 만들기
-        PathD trailPath = new PathD();
+        //--------------------------------------------------
+        // 2. 새로 그린 영역 (Trail Polygon)
+        //
+        // Exit
+        // → Trail
+        // → Enter
+        // → Exit 로 닫기
+        //--------------------------------------------------
 
+        PathD newCapturedPath = new PathD();
+
+        // 시작점
+        newCapturedPath.Add(
+            new PointD(exitPoint.x, exitPoint.y)
+        );
+
+        // Trail 전체
         foreach (Vector3 p in trailPoints)
         {
-            trailPath.Add(new PointD(p.x, p.y));
+            newCapturedPath.Add(
+                new PointD(p.x, p.y)
+            );
         }
 
-        //안쪽판별 점포인트
-        Vector2 insideDir = GetInsideDirection(trailPoints);
+        // 끝점
+        newCapturedPath.Add(
+            new PointD(enterPoint.x, enterPoint.y)
+        );
 
-        // 마지막 점
-        Vector2 lastPoint =
-            trailPoints[trailPoints.Count - 1];
+        // 닫기
+        newCapturedPath.Add(
+            new PointD(exitPoint.x, exitPoint.y)
+        );
 
-        // 안쪽으로 살짝 들어간 보조점
-        Vector2 helperPoint =
-            lastPoint + insideDir * 2f;
-        trailPath.Add(new PointD(helperPoint.x, helperPoint.y));
+        //--------------------------------------------------
+        // 3. Union
+        //--------------------------------------------------
 
-        Debug.Log("Helper Point: " + helperPoint);
-
-
-
-
-        // PathsD 생성
         PathsD subject = new PathsD();
-        subject.AddRange(new[] { territoryPath });
+        subject.Add(territoryPath);
 
         PathsD clip = new PathsD();
-        clip.AddRange(new[] { trailPath });
+        clip.Add(newCapturedPath);
 
-        // Polygon Union 실행
-        PathsD solution = Clipper.Union(subject, clip, FillRule.NonZero);
+        PathsD solution =
+            Clipper.Union(subject, clip, FillRule.NonZero);
 
-        if (solution.Count > 0)
+        solution =
+            Clipper.SimplifyPaths(solution, 0.01);
+
+        if (solution == null || solution.Count == 0)
         {
-            List<Vector2> finalPoints = new List<Vector2>();
-
-            foreach (PointD p in solution[0])
-            {
-                // world → local 좌표 변환
-                finalPoints.Add(
-                    new Vector2(
-                        (float)p.x - transform.position.x,
-                        (float)p.y - transform.position.y
-                    )
-                );
-            }
-
-            // 기존 Territory 자체를 확장
-            polygonCollider.SetPath(0, finalPoints.ToArray());
-
-            UpdateVisual();
-
-            territoryCenter = polygonCollider.bounds.center;
-            Debug.Log("영역 합치기 완료");
+            Debug.LogWarning("Union 실패");
+            return;
         }
+
+        //--------------------------------------------------
+        // 4. 가장 큰 Polygon만 선택
+        //
+        // 분리된 조각 제거
+        //--------------------------------------------------
+
+        PathD bestPath = solution[0];
+        double bestArea =
+            System.Math.Abs(Clipper.Area(bestPath));
+
+        for (int i = 1; i < solution.Count; i++)
+        {
+            double area =
+                System.Math.Abs(Clipper.Area(solution[i]));
+
+            if (area > bestArea)
+            {
+                bestArea = area;
+                bestPath = solution[i];
+            }
+        }
+
+        if (bestPath.Count < 3)
+        {
+            Debug.LogWarning("최종 polygon 부족");
+            return;
+        }
+
+        //--------------------------------------------------
+        // 5. World → Local 변환 후 적용
+        //--------------------------------------------------
+
+        List<Vector2> finalPoints =
+            new List<Vector2>();
+
+        foreach (PointD p in bestPath)
+        {
+            finalPoints.Add(
+                new Vector2(
+                    (float)p.x - transform.position.x,
+                    (float)p.y - transform.position.y
+                )
+            );
+        }
+
+        polygonCollider.SetPath(
+            0,
+            finalPoints.ToArray()
+        );
+
+        UpdateVisual();
+
+        territoryCenter =
+            polygonCollider.bounds.center;
+
+        Debug.Log("영역 합치기 완료");
+        Debug.Log("Trail Count : " + trailPoints.Count);
+        Debug.Log("Final Count : " + finalPoints.Count);
     }
 
-    //Mesh 영역머테리얼
-    public void UpdateVisual() 
+    /// <summary>
+    /// Mesh 갱신
+    /// </summary>
+    public void UpdateVisual()
     {
         Vector2[] points = polygonCollider.GetPath(0);
 
+        if (points == null || points.Length < 3)
+            return;
+
         Mesh mesh = new Mesh();
 
-        Vector3[] vertices = new Vector3[points.Length];
-        int[] triangles = new int[(points.Length - 2) * 3];
+        Vector3[] vertices =
+            new Vector3[points.Length];
+
+        int[] triangles =
+            new int[(points.Length - 2) * 3];
 
         for (int i = 0; i < points.Length; i++)
         {
@@ -181,124 +246,4 @@ public class TerritoryManager : MonoBehaviour
 
         meshFilter.mesh = mesh;
     }
-
-    //영역 중앙 방향
-    private Vector2 GetInsideDirection(List<Vector3> trailPoints) 
-    {
-        if (trailPoints == null || trailPoints.Count == 0)
-            return Vector2.zero;
-
-        Vector2 lastTrailPoint = trailPoints[trailPoints.Count - 1];
-
-        Vector2 direction = (territoryCenter - lastTrailPoint).normalized;
-
-        Debug.Log("Last Trail Point:" + lastTrailPoint);
-        Debug.Log("Inside Direction:" + direction);
-
-        return direction;
-    }
-
-    //영역 시계방향 체크
-    private List<Vector2> GetBoundarySegmentCW(Vector2[] polygonPoints, int startIndex, int endIndex)
-    {
-        List<Vector2> segment = new List<Vector2>();
-
-        int index = startIndex;
-
-        while (index != endIndex)
-        {
-            Vector2 worldPoint =
-                (Vector2)transform.position + polygonPoints[index];
-
-            segment.Add(worldPoint);
-
-            index = (index + 1) % polygonPoints.Length;
-        }
-
-        Vector2 finalPoint =
-            (Vector2)transform.position + polygonPoints[endIndex];
-
-        segment.Add(finalPoint);
-
-        return segment;
-    }
-
-    //영역 반시계방향 체크
-    private List<Vector2> GetBoundarySegmentCCW(Vector2[] polygonPoints, int startIndex, int endIndex)
-    {
-        List<Vector2> segment = new List<Vector2>();
-
-        int index = startIndex;
-
-        while (index != endIndex)
-        {
-            Vector2 worldPoint =
-                (Vector2)transform.position + polygonPoints[index];
-
-            segment.Add(worldPoint);
-
-            index--;
-
-            if (index < 0)
-                index = polygonPoints.Length - 1;
-        }
-
-        Vector2 finalPoint =
-            (Vector2)transform.position + polygonPoints[endIndex];
-
-        segment.Add(finalPoint);
-
-        return segment;
-    }
-
-    //영역 닫을때 가까운 점 포인트 찾는 함수
-    private int FindClosestPointIndex(Vector2[] points, Vector2 target)
-    {
-        int closestIndex = 0;
-        float minDistance = Mathf.Infinity;
-
-        for (int i = 0; i < points.Length; i++)
-        {
-            Vector2 worldPoint =
-                (Vector2)transform.position + points[i];
-
-            float distance =
-                Vector2.Distance(worldPoint, target);
-
-            if (distance < minDistance)
-            {
-                minDistance = distance;
-                closestIndex = i;
-            }
-        }
-
-        return closestIndex;
-    }
-
-    //
-    private List<Vector2> GetBoundarySegment( Vector2[] polygonPoints,int startIndex,int endIndex)
-    {
-        List<Vector2> segment = new List<Vector2>();
-
-        int index = startIndex;
-
-        while (index != endIndex)
-        {
-            Vector2 worldPoint =
-                (Vector2)transform.position + polygonPoints[index];
-
-            segment.Add(worldPoint);
-
-            index = (index + 1) % polygonPoints.Length;
-        }
-
-        // 마지막 점도 추가
-        Vector2 finalPoint =
-            (Vector2)transform.position + polygonPoints[endIndex];
-
-        segment.Add(finalPoint);
-
-        return segment;
-    }
 }
-

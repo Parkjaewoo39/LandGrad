@@ -10,6 +10,7 @@ public class TrailManager : MonoBehaviour
     private LineRenderer lineRenderer;
     private EdgeCollider2D edgeCollider;
 
+    public PlayerController playerController;
     public List<Vector3> points = new List<Vector3>();
 
     void Start()
@@ -17,11 +18,34 @@ public class TrailManager : MonoBehaviour
         lineRenderer = GetComponent<LineRenderer>();
         edgeCollider = GetComponent<EdgeCollider2D>();
 
-        AddPoint();
+        if (lineRenderer == null)
+        {
+            Debug.LogError("LineRenderer 없음");
+        }
+
+        if (edgeCollider == null)
+        {
+            Debug.LogError("EdgeCollider2D 없음");
+        }
     }
 
     void Update()
     {
+        // Trail 그리는 중이 아니면 종료
+        if (!playerController.isDrawingTrail)
+        {
+            return;
+        }
+        // lineRenderer가 이미 제거되었거나 없는 경우 방지
+        if (lineRenderer == null)
+            return;
+        // 첫 시작점이 없으면 최초 1회 추가
+        if (points.Count == 0) 
+        {
+            AddPoint();
+            return;
+        }
+
         if (Vector3.Distance(player.position, points[points.Count - 1]) > minDistance)
         {
             AddPoint();
@@ -29,9 +53,22 @@ public class TrailManager : MonoBehaviour
     }
 
     //LineRenderer.positionCount에 더하는 함수
-    void AddPoint()
+    public void AddPoint()
     {
+        // destroyed object 접근 방지
+        if (lineRenderer == null)
+            return;
+
         Vector3 newPoint = player.position;
+
+        // 같은 위치 중복 추가 방지
+        if (points.Count > 0)
+        {
+            if (Vector3.Distance(newPoint, points[points.Count - 1]) < 0.01f)
+            {
+                return;
+            }
+        }
 
         points.Add(newPoint);
 
@@ -41,9 +78,18 @@ public class TrailManager : MonoBehaviour
         UpdateCollider();
     }
 
-    //지나간 position의 좌표를 배열형태로 저장.
+    //지나간 position의 좌표를 배열형태로 저장.EdgeCollider 갱신
     void UpdateCollider()
     {
+        if (edgeCollider == null)
+            return;
+
+        if (points.Count < 2)
+        {
+            edgeCollider.points = new Vector2[0];
+            return;
+        }
+
         Vector2[] colliderPoints = new Vector2[points.Count];
 
         for (int i = 0; i < points.Count; i++)
@@ -55,9 +101,13 @@ public class TrailManager : MonoBehaviour
     }
 
     //영역 합치기 함수
+    /// <summary>
+    /// (예전 테스트용)
+    /// 지금은 TerritoryManager 사용하므로 사실상 사용 안 함
+    /// </summary>
     public void CreateCapturedArea(List<Vector3> trailPoints)
     {
-        if (trailPoints.Count < 3)
+        if (trailPoints == null || trailPoints.Count < 3)
             return;
        
         GameObject newArea = new GameObject("CapturedArea");
@@ -81,11 +131,20 @@ public class TrailManager : MonoBehaviour
     {
         points.Clear();
 
-        lineRenderer.positionCount = 0;
+        // destroyed object 방지
+        if (lineRenderer != null)
+        {
+            lineRenderer.positionCount = 0;
+        }
 
-        edgeCollider.points = new Vector2[0];
+        if (edgeCollider != null)
+        {
+            edgeCollider.points =
+                new Vector2[0];
+        }
 
-        AddPoint();
+        Debug.Log("Trail 초기화 완료");
+
     }
 }
 
