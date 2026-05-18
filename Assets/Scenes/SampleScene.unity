@@ -404,7 +404,6 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TerritoryManager
   player: {fileID: 2133158589}
   baseRadius: 5
-  variance: 0.5
   pointCount: 30
 --- !u!60 &632502190
 PolygonCollider2D:
@@ -782,10 +781,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8436751726017af4f8244718295d0dad, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
-  territoryManager: {fileID: 632502189}
-  trailManager: {fileID: 939732968}
-  isInsideTerritory: 1
+  moveSpeed: 10
+  turnSpeed: 200
   isDrawingTrail: 0
+  trailManager: {fileID: 939732968}
+  territoryManager: {fileID: 632502189}
 --- !u!114 &2133158587
 MonoBehaviour:
   m_ObjectHideFlags: 0
