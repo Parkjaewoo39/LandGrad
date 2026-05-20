@@ -1,91 +1,166 @@
+// ========================================
+// TrailManager.cs
+// 안정화 버전
+// ========================================
+
 using System.Collections.Generic;
 using UnityEngine;
-using Clipper2Lib; //폴리곤 콜라이더 합치는 플러그인
 
+[RequireComponent(typeof(LineRenderer))]
 public class TrailManager : MonoBehaviour
 {
     public Transform player;
-    public float minDistance = 0.2f;
+
+    [Header("Trail")]
+    public float minDistance = 0.05f;
+
+    public float startOffset = 0.08f;
 
     private LineRenderer lineRenderer;
-    private EdgeCollider2D edgeCollider;
 
-    public List<Vector3> points = new List<Vector3>();
+    public List<Vector3> points =
+        new List<Vector3>();
 
-    void Start()
+    void Awake()
     {
-        lineRenderer = GetComponent<LineRenderer>();
-        edgeCollider = GetComponent<EdgeCollider2D>();
+        lineRenderer =
+            GetComponent<LineRenderer>();
 
-        AddPoint();
+        lineRenderer.positionCount = 0;
+
+        // 곡선 부드럽게
+        lineRenderer.numCornerVertices = 8;
+        lineRenderer.numCapVertices = 8;
+
+        lineRenderer.useWorldSpace = true;
+
+        lineRenderer.loop = false;
     }
 
     void Update()
     {
-        if (Vector3.Distance(player.position, points[points.Count - 1]) > minDistance)
-        {
-            AddPoint();
-        }
-    }
-
-    //LineRenderer.positionCount에 더하는 함수
-    void AddPoint()
-    {
-        Vector3 newPoint = player.position;
-
-        points.Add(newPoint);
-
-        lineRenderer.positionCount = points.Count;
-        lineRenderer.SetPositions(points.ToArray());
-
-        UpdateCollider();
-    }
-
-    //지나간 position의 좌표를 배열형태로 저장.
-    void UpdateCollider()
-    {
-        Vector2[] colliderPoints = new Vector2[points.Count];
-
-        for (int i = 0; i < points.Count; i++)
-        {
-            colliderPoints[i] = new Vector2(points[i].x, points[i].y);
-        }
-
-        edgeCollider.points = colliderPoints;
-    }
-
-    //영역 합치기 함수
-    public void CreateCapturedArea(List<Vector3> trailPoints)
-    {
-        if (trailPoints.Count < 3)
+        if (lineRenderer == null)
             return;
-       
-        GameObject newArea = new GameObject("CapturedArea");
 
-        PolygonCollider2D poly = newArea.AddComponent<PolygonCollider2D>();
+        if (points.Count == 0)
+            return;
 
-        List<Vector2> polygonPoints = new List<Vector2>();
+        Vector3 current =
+            player.position;
 
-        foreach (Vector3 point in trailPoints)
+        float distance =
+            Vector3.Distance(
+                current,
+                points[points.Count - 1]
+            );
+
+        if (distance >= minDistance)
         {
-            polygonPoints.Add(new Vector2(point.x, point.y));
+            AddPoint(current);
         }
-
-        poly.SetPath(0, polygonPoints.ToArray());
-
-        Debug.Log("새 영역 생성 완료");
     }
 
-    //영역만들면 초기화
-    public void ClearTrail() 
+    // ========================================
+    // Trail 시작
+    // ========================================
+
+    public void StartTrail(
+        Vector2 startPoint
+    )
     {
         points.Clear();
 
+        if (lineRenderer == null)
+            return;
+
         lineRenderer.positionCount = 0;
 
-        edgeCollider.points = new Vector2[0];
+        // =========================
+        // 시작 꺾임 방지 핵심
+        // 플레이어 진행방향 반대로
+        // 아주 조금 뒤로 뺌
+        // =========================
 
-        AddPoint();
+        Vector2 direction =
+            -player.up;
+
+        Vector2 fixedStart =
+            startPoint
+            + direction * startOffset;
+
+        // 첫 점 2개 동일하게
+        points.Add(fixedStart);
+        points.Add(fixedStart);
+
+        lineRenderer.positionCount =
+            points.Count;
+
+        lineRenderer.SetPositions(
+            points.ToArray()
+        );
+    }
+
+    // ========================================
+    // Point 추가
+    // ========================================
+
+    void AddPoint(
+        Vector3 point
+    )
+    {
+        if (points.Count > 0)
+        {
+            float dist =
+                Vector3.Distance(
+                    point,
+                    points[points.Count - 1]
+                );
+
+            // 너무 가까우면 무시
+            if (dist < 0.01f)
+            {
+                return;
+            }
+        }
+
+        // =========================
+        // 시작 직후 꺾임 제거
+        // =========================
+
+        if (points.Count == 2)
+        {
+            Vector3 dir =
+                (
+                    point
+                    - points[1]
+                ).normalized;
+
+            points[0] =
+                points[1]
+                - dir * 0.02f;
+        }
+
+        points.Add(point);
+
+        lineRenderer.positionCount =
+            points.Count;
+
+        lineRenderer.SetPositions(
+            points.ToArray()
+        );
+    }
+
+    // ========================================
+    // Trail 제거
+    // ========================================
+
+    public void ClearTrail()
+    {
+        points.Clear();
+
+        if (lineRenderer != null)
+        {
+            lineRenderer.positionCount = 0;
+        }
     }
 }
-

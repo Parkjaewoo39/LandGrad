@@ -1,84 +1,108 @@
+// ========================================
+// PlayerController.cs
+// ========================================
+
 using UnityEngine;
 using UnityEngine.InputSystem;
 
 public class PlayerController : MonoBehaviour
 {
-    private float moveSpeed = 10.0f;
-    private float turnSpeed = 200.0f;
+    [Header("Move")]
+    public float moveSpeed = 10f;
+    public float turnSpeed = 220f;
+
+    [Header("Refs")]
+    public TrailManager trailManager;
+    public TerritoryManager territoryManager;
+
+    private Rigidbody2D rb;
+
     private float turnInput;
+
+    private bool isOutside = false;
 
     private Vector2 exitPoint;
     private Vector2 enterPoint;
 
-    private Rigidbody2D rb;
-
-    public TerritoryManager territoryManager;
-    public TrailManager trailManager;
-
-    public bool isInsideTerritory = true;
-    public bool isDrawingTrail = false;
-
-    private void Awake()
+    void Awake()
     {
         rb = GetComponent<Rigidbody2D>();
+
+        rb.interpolation =
+            RigidbodyInterpolation2D.Interpolate;
+
+        rb.collisionDetectionMode =
+            CollisionDetectionMode2D.Continuous;
     }
 
-    public void OnMove(InputAction.CallbackContext context)
+    public void OnMove(
+        InputAction.CallbackContext context
+    )
     {
-        Vector2 moveInput = context.ReadValue<Vector2>();
+        Vector2 input =
+            context.ReadValue<Vector2>();
 
-        // 좌우 입력만 사용
-        turnInput = moveInput.x;
+        turnInput = input.x;
     }
 
-    private void FixedUpdate()
+    void FixedUpdate()
     {
-        // 자동 전진
-        rb.linearVelocity = transform.up * moveSpeed;
+        rb.linearVelocity =
+            transform.up * moveSpeed;
 
-        // 좌우 회전
         rb.MoveRotation(
-            rb.rotation - turnInput * turnSpeed * Time.deltaTime
+            rb.rotation
+            - turnInput
+            * turnSpeed
+            * Time.fixedDeltaTime
         );
     }
 
-    private void OnTriggerExit2D(Collider2D other)
+    void OnTriggerExit2D(Collider2D other)
     {
-        if (other.CompareTag("Territory"))
-        {
-            isInsideTerritory = false;
-            isDrawingTrail = true;
+        if (!other.CompareTag("Territory"))
+            return;
 
-            exitPoint = transform.position;
+        if (isOutside)
+            return;
 
-            Debug.Log("영역 밖으로 나감");
-            Debug.Log("Exit Point:" + exitPoint);
-        }
+        isOutside = true;
+
+        exitPoint =
+            territoryManager
+            .GetClosestBoundaryPoint(
+                transform.position
+            );
+
+        trailManager.StartTrail(exitPoint);
+
+        Debug.Log("영역 밖");
     }
 
-    private void OnTriggerEnter2D(Collider2D other)
+    void OnTriggerEnter2D(Collider2D other)
     {
-        if (other.CompareTag("Territory"))
-        {
-            // 밖에 있다가 다시 들어온 경우
-            if (isDrawingTrail)
-            {
-                enterPoint = transform.position;
+        if (!other.CompareTag("Territory"))
+            return;
 
-                Debug.Log("Enter Point:" + enterPoint);
+        if (!isOutside)
+            return;
 
-                territoryManager.CreateCapturedArea(trailManager.points, exitPoint, enterPoint);
+        isOutside = false;
 
-                trailManager.ClearTrail();
+        enterPoint =
+           territoryManager
+           .GetClosestBoundaryPoint(
+               transform.position
+           );
 
-                Debug.Log("영역 복귀 → 새 영역 생성");
-            }
+        territoryManager.BuildNewTerritory(
+            trailManager.points,
+            exitPoint,
+            enterPoint
+        );
 
-            isInsideTerritory = true;
-            isDrawingTrail = false;
+        trailManager.ClearTrail();
 
-            
-            Debug.Log("영역 안으로 들어옴");
-        }
+        Debug.Log("영역 복귀");
     }
 }

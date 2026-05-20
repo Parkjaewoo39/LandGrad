@@ -403,9 +403,9 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::TerritoryManager
   player: {fileID: 2133158589}
-  baseRadius: 5
-  variance: 0.5
-  pointCount: 30
+  radius: 3
+  pointCount: 24
+  noise: 0.1
 --- !u!60 &632502190
 PolygonCollider2D:
   m_ObjectHideFlags: 0
@@ -548,6 +548,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: Assembly-CSharp::TrailManager
   player: {fileID: 2133158589}
   minDistance: 0.2
+  startOffset: 0.08
   points: []
 --- !u!68 &939732969
 EdgeCollider2D:
@@ -782,10 +783,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8436751726017af4f8244718295d0dad, type: 3}
   m_Name: 
   m_EditorClassIdentifier: Assembly-CSharp::PlayerController
-  territoryManager: {fileID: 632502189}
+  moveSpeed: 10
+  turnSpeed: 200
   trailManager: {fileID: 939732968}
-  isInsideTerritory: 1
-  isDrawingTrail: 0
+  territoryManager: {fileID: 632502189}
 --- !u!114 &2133158587
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -965,7 +966,7 @@ SpriteRenderer:
   m_SortingLayer: 0
   m_SortingOrder: 0
   m_MaskInteraction: 0
-  m_Sprite: {fileID: 7482667652216324306, guid: 311925a002f4447b3a28927169b83ea6, type: 3}
+  m_Sprite: {fileID: -2413806693520163455, guid: ebe73ca9363db456bacf42c025bb4847, type: 3}
   m_Color: {r: 1, g: 0, b: 0, a: 1}
   m_FlipX: 0
   m_FlipY: 0
@@ -1013,7 +1014,7 @@ Rigidbody2D:
   m_ExcludeLayers:
     serializedVersion: 2
     m_Bits: 0
-  m_Interpolate: 0
+  m_Interpolate: 1
   m_SleepingMode: 1
   m_CollisionDetection: 1
   m_Constraints: 0
@@ -1068,7 +1069,6 @@ LineRenderer:
   m_MaskInteraction: 0
   m_Positions:
   - {x: 0, y: 0, z: 0}
-  - {x: 0, y: 0, z: 1}
   m_Parameters:
     serializedVersion: 3
     widthMultiplier: 1
@@ -1121,14 +1121,14 @@ LineRenderer:
     numCapVertices: 0
     alignment: 0
     textureMode: 0
-    textureScale: {x: 1, y: 1}
+    textureScale: {x: 0.5, y: 0.5}
     shadowBias: 0.5
     generateLightingData: 0
   m_UseWorldSpace: 1
   m_Loop: 0
   m_ApplyActiveColorSpace: 1
---- !u!61 &2133158592
-BoxCollider2D:
+--- !u!58 &2133158592
+CircleCollider2D:
   m_ObjectHideFlags: 0
   m_CorrespondingSourceObject: {fileID: 0}
   m_PrefabInstance: {fileID: 0}
@@ -1162,17 +1162,7 @@ BoxCollider2D:
   m_CompositeOperation: 0
   m_CompositeOrder: 0
   m_Offset: {x: 0, y: 0}
-  m_SpriteTilingProperty:
-    border: {x: 0, y: 0, z: 0, w: 0}
-    pivot: {x: 0.5, y: 0.5}
-    oldSize: {x: 1, y: 1}
-    newSize: {x: 1, y: 1}
-    adaptiveTilingThreshold: 0.5
-    drawMode: 0
-    adaptiveTiling: 0
-  m_AutoTiling: 0
-  m_Size: {x: 1, y: 1}
-  m_EdgeRadius: 0
+  m_Radius: 0.5
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
