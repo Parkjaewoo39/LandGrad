@@ -5,6 +5,7 @@ TagManager:
   serializedVersion: 3
   tags:
   - Territory
+  - Trail
   layers:
   - Default
   - TransparentFX

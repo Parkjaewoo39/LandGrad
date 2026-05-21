@@ -1,22 +1,23 @@
 // ========================================
 // TrailManager.cs
-// 안정화 버전
+// 중심선 기반 안정화 버전
 // ========================================
 
 using System.Collections.Generic;
 using UnityEngine;
 
 [RequireComponent(typeof(LineRenderer))]
+[RequireComponent(typeof(EdgeCollider2D))]
 public class TrailManager : MonoBehaviour
 {
     public Transform player;
-
+    public PlayerController owner;
     [Header("Trail")]
-    public float minDistance = 0.05f;
-
-    public float startOffset = 0.08f;
+    public float minDistance = 0.12f;
 
     private LineRenderer lineRenderer;
+
+    private EdgeCollider2D edgeCollider;
 
     public List<Vector3> points =
         new List<Vector3>();
@@ -26,22 +27,26 @@ public class TrailManager : MonoBehaviour
         lineRenderer =
             GetComponent<LineRenderer>();
 
-        lineRenderer.positionCount = 0;
+        edgeCollider =
+            GetComponent<EdgeCollider2D>();
 
-        // 곡선 부드럽게
-        lineRenderer.numCornerVertices = 8;
-        lineRenderer.numCapVertices = 8;
+        edgeCollider.isTrigger = true;
+
+        edgeCollider.edgeRadius = 0.05f;
+
+        lineRenderer.positionCount = 0;
 
         lineRenderer.useWorldSpace = true;
 
         lineRenderer.loop = false;
+
+        lineRenderer.numCornerVertices = 8;
+
+        lineRenderer.numCapVertices = 8;
     }
 
-    void Update()
+    void FixedUpdate()
     {
-        if (lineRenderer == null)
-            return;
-
         if (points.Count == 0)
             return;
 
@@ -70,27 +75,11 @@ public class TrailManager : MonoBehaviour
     {
         points.Clear();
 
-        if (lineRenderer == null)
-            return;
-
         lineRenderer.positionCount = 0;
 
-        // =========================
-        // 시작 꺾임 방지 핵심
-        // 플레이어 진행방향 반대로
-        // 아주 조금 뒤로 뺌
-        // =========================
+        points.Add(startPoint);
 
-        Vector2 direction =
-            -player.up;
-
-        Vector2 fixedStart =
-            startPoint
-            + direction * startOffset;
-
-        // 첫 점 2개 동일하게
-        points.Add(fixedStart);
-        points.Add(fixedStart);
+        points.Add(startPoint);
 
         lineRenderer.positionCount =
             points.Count;
@@ -98,6 +87,8 @@ public class TrailManager : MonoBehaviour
         lineRenderer.SetPositions(
             points.ToArray()
         );
+
+        UpdateCollider();
     }
 
     // ========================================
@@ -113,20 +104,16 @@ public class TrailManager : MonoBehaviour
             float dist =
                 Vector3.Distance(
                     point,
-                    points[points.Count - 1]
+                    points[
+                        points.Count - 1
+                    ]
                 );
 
-            // 너무 가까우면 무시
             if (dist < 0.01f)
-            {
                 return;
-            }
         }
 
-        // =========================
-        // 시작 직후 꺾임 제거
-        // =========================
-
+        // 시작 꺾임 방지
         if (points.Count == 2)
         {
             Vector3 dir =
@@ -148,6 +135,36 @@ public class TrailManager : MonoBehaviour
         lineRenderer.SetPositions(
             points.ToArray()
         );
+
+        UpdateCollider();
+    }
+
+    // ========================================
+    // EdgeCollider 업데이트
+    // ========================================
+
+    void UpdateCollider()
+    {
+        if (points.Count < 2)
+            return;
+
+        Vector2[] colliderPoints =
+            new Vector2[
+                points.Count
+            ];
+
+        for (
+            int i = 0;
+            i < points.Count;
+            i++
+        )
+        {
+            colliderPoints[i] =
+                points[i];
+        }
+
+        edgeCollider.points =
+            colliderPoints;
     }
 
     // ========================================
@@ -162,5 +179,8 @@ public class TrailManager : MonoBehaviour
         {
             lineRenderer.positionCount = 0;
         }
+
+        edgeCollider.points =
+            new Vector2[0];
     }
 }
