@@ -1,12 +1,8 @@
-// ========================================
-// PlayerController.cs
-// 안정화 버전
-// ========================================
-
+using Fusion;
 using UnityEngine;
 using UnityEngine.InputSystem;
 
-public class PlayerController : MonoBehaviour
+public class PlayerController : NetworkBehaviour
 {
     [Header("Move")]
     public float moveSpeed = 10f;
@@ -15,9 +11,15 @@ public class PlayerController : MonoBehaviour
 
     private float turnInput;
 
-    [Header("References")]
+    [Header("Prefab")]
+    public TerritoryManager territoryPrefab;
+
+    public TrailManager trailPrefab;
+
+    [HideInInspector]
     public TerritoryManager territoryManager;
 
+    [HideInInspector]
     public TrailManager trailManager;
 
     private Rigidbody2D rb;
@@ -34,10 +36,6 @@ public class PlayerController : MonoBehaviour
 
     private Vector2 enterPoint;
 
-    // ========================================
-    // Awake
-    // ========================================
-
     void Awake()
     {
         rb =
@@ -45,14 +43,36 @@ public class PlayerController : MonoBehaviour
 
         rb.interpolation =
             RigidbodyInterpolation2D.Interpolate;
-
-        // 자기 owner 등록
-        trailManager.owner = this;
     }
 
-    // ========================================
-    // Input
-    // ========================================
+    void Start()
+    {
+        SpawnManagers();
+    }
+
+    void SpawnManagers()
+    {
+        territoryManager =
+            Instantiate(
+                territoryPrefab,
+                transform.position,
+                Quaternion.identity
+            );
+
+        trailManager =
+            Instantiate(
+                trailPrefab
+            );
+
+        territoryManager.player =
+            transform;
+
+        trailManager.player =
+            transform;
+
+        trailManager.owner =
+            this;
+    }
 
     public void OnMove(
         InputAction.CallbackContext context
@@ -63,10 +83,6 @@ public class PlayerController : MonoBehaviour
 
         turnInput = input.x;
     }
-
-    // ========================================
-    // Movement
-    // ========================================
 
     void FixedUpdate()
     {
@@ -79,11 +95,6 @@ public class PlayerController : MonoBehaviour
             * turnSpeed
             * Time.fixedDeltaTime
         );
-
-        // ====================================
-        // 영역 완전히 벗어난 후
-        // trail 시작
-        // ====================================
 
         if (waitingTrailStart)
         {
@@ -111,10 +122,6 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    // ========================================
-    // 영역 나감
-    // ========================================
-
     void OnTriggerExit2D(
         Collider2D other
     )
@@ -134,28 +141,17 @@ public class PlayerController : MonoBehaviour
         territoryExitPosition =
             transform.position;
 
-        // 영역 경계 기준 시작점
         exitPoint =
             territoryManager
             .GetClosestBoundaryPoint(
                 transform.position
             );
-
-        Debug.Log("영역 밖");
     }
-
-    // ========================================
-    // Trigger Stay
-    // ========================================
 
     void OnTriggerStay2D(
         Collider2D other
     )
     {
-        // ====================================
-        // Territory 복귀
-        // ====================================
-
         if (
             other.CompareTag("Territory")
         )
@@ -183,24 +179,14 @@ public class PlayerController : MonoBehaviour
 
             trailManager.ClearTrail();
 
-            Debug.Log("영역 복귀");
-
             return;
         }
-
-        // ====================================
-        // Trail 충돌
-        // ====================================
 
         TrailManager trail =
             other.GetComponent<TrailManager>();
 
         if (trail == null)
             return;
-
-        // ====================================
-        // 자기 trail 충돌
-        // ====================================
 
         if (
             trail.owner == this
@@ -215,10 +201,6 @@ public class PlayerController : MonoBehaviour
             return;
         }
 
-        // ====================================
-        // 상대 trail 충돌
-        // ====================================
-
         if (
             trail.owner != this
         )
@@ -227,23 +209,13 @@ public class PlayerController : MonoBehaviour
         }
     }
 
-    // ========================================
-    // 자기 선 충돌 활성화
-    // ========================================
-
     void EnableOwnTrailHit()
     {
         canHitOwnTrail = true;
     }
 
-    // ========================================
-    // 죽음
-    // ========================================
-
     void Die()
     {
-        Debug.Log("죽음");
-
         CancelInvoke();
 
         trailManager.ClearTrail();

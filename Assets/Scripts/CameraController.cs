@@ -1,14 +1,59 @@
 using UnityEngine;
 
-public class CameraController : MonoBehaviour
+public class CameraController
+    : MonoBehaviour
 {
-    public Vector3 offset = new Vector3(0, 0, -10);
-    public Transform targetPlayer;
-    
-   
-    // Update is called once per frame
+    private Transform targetPlayer;
+
+    [Header("Follow")]
+    public float followSpeed = 10f;
+
     void LateUpdate()
     {
-         this.gameObject.transform.position = targetPlayer.transform.position + offset;
+        if (targetPlayer == null)
+        {
+            FindLocalPlayer();
+            return;
+        }
+
+        Vector3 targetPosition =
+            targetPlayer.position;
+
+        targetPosition.z = -10f;
+
+        transform.position =
+            Vector3.Lerp(
+                transform.position,
+                targetPosition,
+                followSpeed
+                * Time.deltaTime
+            );
+    }
+
+    void FindLocalPlayer()
+    {
+        PlayerController[] players =
+            FindObjectsByType<PlayerController>(
+                FindObjectsSortMode.None
+            );
+
+        foreach (
+            PlayerController player
+            in players
+        )
+        {
+            if (
+                player.Object != null
+                &&
+                player.Object
+                    .HasInputAuthority
+            )
+            {
+                targetPlayer =
+                    player.transform;
+
+                break;
+            }
+        }
     }
 }

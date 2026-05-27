@@ -36,6 +36,10 @@ public class TerritoryManager : MonoBehaviour
 
     void Start()
     {
+        if (player == null)
+        {
+            return;  
+        }
         CreateStartTerritory();
 
         UpdateVisual();
