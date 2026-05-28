@@ -18,7 +18,7 @@ public class LoadingUI : MonoBehaviour
             Mathf.Lerp(
                 currentProgress,
                 targetProgress,
-                Time.deltaTime * 5f
+                Time.deltaTime * 10f
             );
 
         fillImage.fillAmount =

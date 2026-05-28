@@ -1,8 +1,3 @@
-// ========================================
-// TerritoryManager.cs
-// 중심선 기반 안정화 버전
-// ========================================
-
 using System.Collections.Generic;
 using UnityEngine;
 using Clipper2Lib;
@@ -13,13 +8,12 @@ using LibTessDotNet;
 [RequireComponent(typeof(MeshRenderer))]
 public class TerritoryManager : MonoBehaviour
 {
-   
     public Transform player;
 
     [Header("Start Territory")]
     public float radius = 2.5f;
 
-    public int pointCount = 60;
+    public int pointCount = 240;
 
     private PolygonCollider2D polygonCollider;
 
@@ -36,34 +30,20 @@ public class TerritoryManager : MonoBehaviour
 
     void Start()
     {
-        if (player == null)
-        {
-            return;  
-        }
         CreateStartTerritory();
 
         UpdateVisual();
     }
-
-    // ========================================
-    // 시작 영역 생성
-    // ========================================
 
     void CreateStartTerritory()
     {
         List<Vector2> points =
             new List<Vector2>();
 
-        for (
-            int i = 0;
-            i < pointCount;
-            i++
-        )
+        for (int i = 0; i < pointCount; i++)
         {
             float angle =
-                Mathf.PI * 2f
-                * i
-                / pointCount;
+                Mathf.PI * 2f * i / pointCount;
 
             Vector2 point =
                 new Vector2(
@@ -83,10 +63,6 @@ public class TerritoryManager : MonoBehaviour
             player.position;
     }
 
-    // ========================================
-    // 영역 생성
-    // ========================================
-
     public void BuildNewTerritory(
         List<Vector3> trailPoints,
         Vector2 exitPoint,
@@ -102,17 +78,9 @@ public class TerritoryManager : MonoBehaviour
         Vector2[] currentPath =
             polygonCollider.GetPath(0);
 
-        int exitIndex =
-            FindClosestIndex(
-                currentPath,
-                exitPoint
-            );
+        int exitIndex = FindClosestEdgeIndex(currentPath, exitPoint);
 
-        int enterIndex =
-            FindClosestIndex(
-                currentPath,
-                enterPoint
-            );
+        int enterIndex = FindClosestEdgeIndex(currentPath, enterPoint);
 
         List<Vector2> clockwise =
             GetClockwisePoints(
@@ -146,16 +114,12 @@ public class TerritoryManager : MonoBehaviour
 
         float areaA =
             Mathf.Abs(
-                CalculateArea(
-                    polygonA
-                )
+                CalculateArea(polygonA)
             );
 
         float areaB =
             Mathf.Abs(
-                CalculateArea(
-                    polygonB
-                )
+                CalculateArea(polygonB)
             );
 
         List<Vector2> capturePolygon =
@@ -163,30 +127,18 @@ public class TerritoryManager : MonoBehaviour
             ? polygonA
             : polygonB;
 
-        // ========================================
-        // territory path
-        // ========================================
-
         PathD territoryPath =
             new PathD();
 
         foreach (Vector2 p in currentPath)
         {
             Vector2 world =
-                (Vector2)transform.position
-                + p;
+                (Vector2)transform.position + p;
 
             territoryPath.Add(
-                new PointD(
-                    world.x,
-                    world.y
-                )
+                new PointD(world.x, world.y)
             );
         }
-
-        // ========================================
-        // capture path
-        // ========================================
 
         PathD capturePath =
             new PathD();
@@ -194,30 +146,19 @@ public class TerritoryManager : MonoBehaviour
         foreach (Vector2 p in capturePolygon)
         {
             capturePath.Add(
-                new PointD(
-                    p.x,
-                    p.y
-                )
+                new PointD(p.x, p.y)
             );
         }
-
-        // ========================================
-        // union
-        // ========================================
 
         PathsD subject =
             new PathsD();
 
-        subject.Add(
-            territoryPath
-        );
+        subject.Add(territoryPath);
 
         PathsD clip =
             new PathsD();
 
-        clip.Add(
-            capturePath
-        );
+        clip.Add(capturePath);
 
         PathsD solution =
             Clipper.Union(
@@ -226,10 +167,6 @@ public class TerritoryManager : MonoBehaviour
                 FillRule.NonZero
             );
 
-        // ========================================
-        // simplify
-        // ========================================
-
         solution =
             Clipper.SimplifyPaths(
                 solution,
@@ -237,26 +174,14 @@ public class TerritoryManager : MonoBehaviour
             );
 
         if (solution.Count == 0)
-        {
-            Debug.LogWarning(
-                "Union 실패"
-            );
-
             return;
-        }
-
-        // ========================================
-        // 가장 큰 polygon
-        // ========================================
 
         PathD largest =
             solution[0];
 
         double largestArea =
             Mathf.Abs(
-                (float)Clipper.Area(
-                    largest
-                )
+                (float)Clipper.Area(largest)
             );
 
         foreach (PathD p in solution)
@@ -268,16 +193,10 @@ public class TerritoryManager : MonoBehaviour
 
             if (area > largestArea)
             {
-                largestArea =
-                    area;
-
+                largestArea = area;
                 largest = p;
             }
         }
-
-        // ========================================
-        // collider 적용
-        // ========================================
 
         List<Vector2> finalPoints =
             new List<Vector2>();
@@ -286,11 +205,8 @@ public class TerritoryManager : MonoBehaviour
         {
             finalPoints.Add(
                 new Vector2(
-                    (float)p.x
-                    - transform.position.x,
-
-                    (float)p.y
-                    - transform.position.y
+                    (float)p.x - transform.position.x,
+                    (float)p.y - transform.position.y
                 )
             );
         }
@@ -303,10 +219,6 @@ public class TerritoryManager : MonoBehaviour
         UpdateVisual();
     }
 
-    // ========================================
-    // polygon 생성
-    // ========================================
-
     List<Vector2> BuildPolygon(
         Vector2 exitPoint,
         Vector2 enterPoint,
@@ -317,72 +229,131 @@ public class TerritoryManager : MonoBehaviour
         List<Vector2> polygon =
             new List<Vector2>();
 
-        polygon.Add(exitPoint);
+        AddPointIfFar(
+            polygon,
+            exitPoint
+        );
 
         foreach (Vector3 p in trailPoints)
         {
-            polygon.Add(
-                new Vector2(
-                    p.x,
-                    p.y
-                )
+            AddPointIfFar(
+                polygon,
+                new Vector2(p.x, p.y)
             );
         }
 
-        polygon.Add(enterPoint);
+        AddPointIfFar(
+            polygon,
+            enterPoint
+        );
 
         foreach (Vector2 p in boundary)
         {
-            polygon.Add(p);
+            AddPointIfFar(
+                polygon,
+                p
+            );
         }
+
+        RemoveCollinearPoints(
+            polygon
+        );
 
         return polygon;
     }
 
-    // ========================================
-    // 가장 가까운 index
-    // ========================================
-
-    int FindClosestIndex(
-        Vector2[] polygon,
-        Vector2 target
+    void AddPointIfFar(
+        List<Vector2> points,
+        Vector2 point
     )
     {
-        int closest = 0;
+        if (points.Count == 0)
+        {
+            points.Add(point);
+            return;
+        }
 
-        float minDistance =
-            Mathf.Infinity;
+        float dist =
+            Vector2.Distance(
+                points[points.Count - 1],
+                point
+            );
+
+        if (dist > 0.02f)
+        {
+            points.Add(point);
+        }
+    }
+
+    void RemoveCollinearPoints(
+        List<Vector2> points
+    )
+    {
+        if (points.Count < 3)
+            return;
 
         for (
-            int i = 0;
-            i < polygon.Length;
-            i++
+            int i = points.Count - 1;
+            i >= 0;
+            i--
         )
         {
-            Vector2 worldPoint =
-                (Vector2)transform.position
-                + polygon[i];
+            Vector2 prev =
+                points[
+                    (i - 1 + points.Count)
+                    % points.Count
+                ];
 
-            float dist =
-                Vector2.Distance(
-                    worldPoint,
-                    target
-                );
+            Vector2 current =
+                points[i];
 
-            if (dist < minDistance)
+            Vector2 next =
+                points[
+                    (i + 1)
+                    % points.Count
+                ];
+
+            Vector2 dir1 =
+                (current - prev).normalized;
+
+            Vector2 dir2 =
+                (next - current).normalized;
+
+            float dot =
+                Vector2.Dot(dir1, dir2);
+
+            if (dot > 0.999f)
             {
-                minDistance = dist;
+                points.RemoveAt(i);
+            }
+        }
+    }
 
-                closest = i;
+    int FindClosestEdgeIndex(Vector2[] polygon, Vector2 target)
+    {
+        int closestIndex = 0;
+
+        float closestDistance = Mathf.Infinity;
+
+        for (int i = 0; i < polygon.Length; i++)
+        {
+            Vector2 a = (Vector2)transform.position + polygon[i];
+
+            Vector2 b = (Vector2)transform.position + polygon[(i + 1) % polygon.Length];
+
+            Vector2 projected = GetClosestPointOnSegment(a, b, target);
+
+            float dist = (target - projected).sqrMagnitude;
+
+            if (dist < closestDistance)
+            {
+                closestDistance = dist;
+                closestIndex = i;
             }
         }
 
-        return closest;
+        return closestIndex;
     }
-
-    // ========================================
-    // 시계방향
-    // ========================================
 
     List<Vector2> GetClockwisePoints(
         Vector2[] polygon,
@@ -415,12 +386,7 @@ public class TerritoryManager : MonoBehaviour
         return result;
     }
 
-    // ========================================
-    // 반시계방향
-    // ========================================
-
-    List<Vector2>
-    GetCounterClockwisePoints(
+    List<Vector2> GetCounterClockwisePoints(
         Vector2[] polygon,
         int start,
         int end
@@ -455,21 +421,13 @@ public class TerritoryManager : MonoBehaviour
         return result;
     }
 
-    // ========================================
-    // 면적 계산
-    // ========================================
-
     float CalculateArea(
         List<Vector2> polygon
     )
     {
         float area = 0f;
 
-        for (
-            int i = 0;
-            i < polygon.Count;
-            i++
-        )
+        for (int i = 0; i < polygon.Count; i++)
         {
             Vector2 current =
                 polygon[i];
@@ -490,9 +448,73 @@ public class TerritoryManager : MonoBehaviour
         return area * 0.5f;
     }
 
-    // ========================================
-    // Mesh 생성
-    // ========================================
+    public Vector2 GetClosestBoundaryPoint(
+        Vector2 worldPosition
+    )
+    {
+        Vector2[] points =
+            polygonCollider.GetPath(0);
+
+        Vector2 closestPoint =
+            Vector2.zero;
+
+        float closestDistance =
+            Mathf.Infinity;
+
+        for (int i = 0; i < points.Length; i++)
+        {
+            Vector2 a =
+                (Vector2)transform.position
+                + points[i];
+
+            Vector2 b =
+                (Vector2)transform.position
+                + points[
+                    (i + 1)
+                    % points.Length
+                ];
+
+            Vector2 projected =
+                GetClosestPointOnSegment(
+                    a,
+                    b,
+                    worldPosition
+                );
+
+            float dist =
+                (
+                    worldPosition
+                    - projected
+                ).sqrMagnitude;
+
+            if (dist < closestDistance)
+            {
+                closestDistance = dist;
+                closestPoint = projected;
+            }
+        }
+
+        return closestPoint;
+    }
+
+    Vector2 GetClosestPointOnSegment(
+        Vector2 a,
+        Vector2 b,
+        Vector2 point
+    )
+    {
+        Vector2 ab = b - a;
+
+        float t =
+            Vector2.Dot(
+                point - a,
+                ab
+            ) / ab.sqrMagnitude;
+
+        t = Mathf.Clamp01(t);
+
+        return a + ab * t;
+    }
 
     void UpdateVisual()
     {
@@ -510,11 +532,7 @@ public class TerritoryManager : MonoBehaviour
                 points.Length
             ];
 
-        for (
-            int i = 0;
-            i < points.Length;
-            i++
-        )
+        for (int i = 0; i < points.Length; i++)
         {
             contour[i].Position =
                 new Vec3(
@@ -543,11 +561,7 @@ public class TerritoryManager : MonoBehaviour
                 tess.Vertices.Length
             ];
 
-        for (
-            int i = 0;
-            i < tess.Vertices.Length;
-            i++
-        )
+        for (int i = 0; i < tess.Vertices.Length; i++)
         {
             vertices[i] =
                 new Vector3(
@@ -562,11 +576,7 @@ public class TerritoryManager : MonoBehaviour
                 tess.ElementCount * 3
             ];
 
-        for (
-            int i = 0;
-            i < tess.ElementCount;
-            i++
-        )
+        for (int i = 0; i < tess.ElementCount; i++)
         {
             triangles[i * 3] =
                 tess.Elements[i * 3];
@@ -590,49 +600,5 @@ public class TerritoryManager : MonoBehaviour
 
         meshFilter.mesh =
             mesh;
-    }
-
-    // ========================================
-    // 가장 가까운 boundary point 반환
-    // ========================================
-
-    public Vector2 GetClosestBoundaryPoint(
-        Vector2 worldPosition
-    )
-    {
-        Vector2[] points =
-            polygonCollider.GetPath(0);
-
-        Vector2 closest =
-            Vector2.zero;
-
-        float minDistance =
-            Mathf.Infinity;
-
-        for (
-            int i = 0;
-            i < points.Length;
-            i++
-        )
-        {
-            Vector2 worldPoint =
-                (Vector2)transform.position
-                + points[i];
-
-            float dist =
-                Vector2.Distance(
-                    worldPosition,
-                    worldPoint
-                );
-
-            if (dist < minDistance)
-            {
-                minDistance = dist;
-
-                closest = worldPoint;
-            }
-        }
-
-        return closest;
     }
 }

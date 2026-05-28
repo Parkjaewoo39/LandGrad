@@ -141,9 +141,10 @@ public class PlayerController : NetworkBehaviour
         territoryExitPosition =
             transform.position;
 
+        Collider2D territoryCollider = other.GetComponent<Collider2D>();
+
         exitPoint =
-            territoryManager
-            .GetClosestBoundaryPoint(
+            territoryCollider.ClosestPoint(
                 transform.position
             );
     }
@@ -165,9 +166,11 @@ public class PlayerController : NetworkBehaviour
 
             canHitOwnTrail = false;
 
+            Collider2D territoryCollider =
+    other.GetComponent<Collider2D>();
+
             enterPoint =
-                territoryManager
-                .GetClosestBoundaryPoint(
+                territoryCollider.ClosestPoint(
                     transform.position
                 );
 

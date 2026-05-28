@@ -6,7 +6,6 @@ using Fusion.Sockets;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
-
 public class NetworkRunnerHandler :
     MonoBehaviour,
     INetworkRunnerCallbacks
@@ -21,6 +20,7 @@ public class NetworkRunnerHandler :
 
     public GameObject loadingPanel;
 
+    private List<Vector2> usedSpawnPositions = new List<Vector2>();
     async void Awake()
     {
         Debug.Log(
@@ -164,19 +164,46 @@ public class NetworkRunnerHandler :
 
     Vector2 GetRandomSpawnPosition()
     {
-        float x =
-            UnityEngine.Random.Range(
-                -720f,
-                720f
-            );
+        const int maxTry = 30;
 
-        float y =
-            UnityEngine.Random.Range(
-                -360f,
-                360f
-            );
+        for (int i = 0; i < maxTry; i++)
+        {
+            Vector2 randomPos =
+                new Vector2(
+                    UnityEngine.Random.Range(-30f, 30f),
+                    UnityEngine.Random.Range(-15f, 15f)
+                );
 
-        return new Vector2(x, y);
+            bool valid = true;
+
+            foreach (
+                Vector2 usedPos
+                in usedSpawnPositions
+            )
+            {
+                float dist =
+                    Vector2.Distance(
+                        randomPos,
+                        usedPos
+                    );
+
+                if (dist < 12f)
+                {
+                    valid = false;
+                    break;
+                }
+            }
+
+            if (valid)
+            {
+                usedSpawnPositions
+                    .Add(randomPos);
+
+                return randomPos;
+            }
+        }
+
+        return Vector2.zero;
     }
 
     public void OnInput(
