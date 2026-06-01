@@ -9,596 +9,177 @@ using LibTessDotNet;
 public class TerritoryManager : MonoBehaviour
 {
     public Transform player;
-
-    [Header("Start Territory")]
-    public float radius = 2.5f;
-
-    public int pointCount = 240;
+    public float startRadius = 2.5f;
+    public int pointCount = 60; // 시작 시 너무 많은 정점은 성능 저하를 유발 (60 정도면 충분)
 
     private PolygonCollider2D polygonCollider;
-
     private MeshFilter meshFilter;
+    private Mesh territoryMesh;
 
     void Awake()
     {
-        polygonCollider =
-            GetComponent<PolygonCollider2D>();
+        polygonCollider = GetComponent<PolygonCollider2D>();
+        meshFilter = GetComponent<MeshFilter>();
 
-        meshFilter =
-            GetComponent<MeshFilter>();
+        // 메시 재사용을 위해 한 번만 생성
+        territoryMesh = new Mesh();
+        territoryMesh.name = "TerritoryMesh";
+        meshFilter.mesh = territoryMesh;
+
+        // Territory 오브젝트는 월드 중심(0,0)에 있는 것이 계산에 유리합니다.
+        transform.position = Vector3.zero;
+        transform.rotation = Quaternion.identity;
     }
 
     void Start()
     {
         CreateStartTerritory();
-
         UpdateVisual();
     }
 
     void CreateStartTerritory()
     {
-        List<Vector2> points =
-            new List<Vector2>();
+        List<Vector2> points = new List<Vector2>();
+        // 플레이어의 시작 위치를 기준으로 원형 영토 생성
+        Vector2 startPos = (Vector2)player.position;
 
         for (int i = 0; i < pointCount; i++)
         {
-            float angle =
-                Mathf.PI * 2f * i / pointCount;
-
-            Vector2 point =
-                new Vector2(
-                    Mathf.Cos(angle) * radius,
-                    Mathf.Sin(angle) * radius
-                );
-
+            float angle = Mathf.PI * 2f * i / pointCount;
+            Vector2 point = startPos + new Vector2(Mathf.Cos(angle) * startRadius, Mathf.Sin(angle) * startRadius);
             points.Add(point);
         }
 
-        polygonCollider.SetPath(
-            0,
-            points.ToArray()
-        );
-
-        transform.position =
-            player.position;
+        polygonCollider.SetPath(0, points.ToArray());
     }
 
-    public void BuildNewTerritory(
-        List<Vector3> trailPoints,
-        Vector2 exitPoint,
-        Vector2 enterPoint
-    )
+    public void BuildNewTerritory(List<Vector3> trailPoints, Vector2 exitPoint, Vector2 enterPoint)
     {
-        if (trailPoints == null)
-            return;
+        if (trailPoints == null || trailPoints.Count < 2) return;
 
-        if (trailPoints.Count < 3)
-            return;
-
-        Vector2[] currentPath =
-            polygonCollider.GetPath(0);
-
-        int exitIndex = FindClosestEdgeIndex(currentPath, exitPoint);
-
-        int enterIndex = FindClosestEdgeIndex(currentPath, enterPoint);
-
-        List<Vector2> clockwise =
-            GetClockwisePoints(
-                currentPath,
-                exitIndex,
-                enterIndex
-            );
-
-        List<Vector2> counterClockwise =
-            GetCounterClockwisePoints(
-                currentPath,
-                exitIndex,
-                enterIndex
-            );
-
-        List<Vector2> polygonA =
-            BuildPolygon(
-                exitPoint,
-                enterPoint,
-                trailPoints,
-                clockwise
-            );
-
-        List<Vector2> polygonB =
-            BuildPolygon(
-                exitPoint,
-                enterPoint,
-                trailPoints,
-                counterClockwise
-            );
-
-        float areaA =
-            Mathf.Abs(
-                CalculateArea(polygonA)
-            );
-
-        float areaB =
-            Mathf.Abs(
-                CalculateArea(polygonB)
-            );
-
-        List<Vector2> capturePolygon =
-            areaA > areaB
-            ? polygonA
-            : polygonB;
-
-        PathD territoryPath =
-            new PathD();
-
-        foreach (Vector2 p in currentPath)
+        // 1. 기존 영토 경로 (World Space)
+        PathD currentPath = new PathD();
+        foreach (Vector2 p in polygonCollider.GetPath(0))
         {
-            Vector2 world =
-                (Vector2)transform.position + p;
-
-            territoryPath.Add(
-                new PointD(world.x, world.y)
-            );
+            currentPath.Add(new PointD(p.x, p.y));
         }
 
-        PathD capturePath =
-            new PathD();
-
-        foreach (Vector2 p in capturePolygon)
+        // 2. 꼬리(Trail) 경로 생성
+        // 꼬리는 선이므로 두께를 아주 미세하게 주어 다각형(Polygon)으로 인식시켜야 합집합이 잘 됩니다.
+        PathD trailPath = new PathD();
+        trailPath.Add(new PointD(exitPoint.x, exitPoint.y));
+        foreach (Vector3 tp in trailPoints)
         {
-            capturePath.Add(
-                new PointD(p.x, p.y)
-            );
+            trailPath.Add(new PointD(tp.x, tp.y));
         }
+        trailPath.Add(new PointD(enterPoint.x, enterPoint.y));
 
-        PathsD subject =
-            new PathsD();
+        // 3. Clipper2를 이용한 합집합 연산
+        // 기존 영토와 플레이어가 방금 그린 꼬리 경로를 합칩니다.
+        PathsD subject = new PathsD { currentPath };
+        PathsD clip = new PathsD { trailPath };
 
-        subject.Add(territoryPath);
+        // Union 연산: 기존 땅 + 꼬리가 가두고 있는 영역
+        PathsD solution = Clipper.Union(subject, clip, FillRule.NonZero);
 
-        PathsD clip =
-            new PathsD();
+        // 4. 경로 최적화 및 단순화 (성능 및 데이터 정밀도 조절)
+        solution = Clipper.SimplifyPaths(solution, 0.02);
 
-        clip.Add(capturePath);
-
-        PathsD solution =
-            Clipper.Union(
-                subject,
-                clip,
-                FillRule.NonZero
-            );
-
-        solution =
-            Clipper.SimplifyPaths(
-                solution,
-                0.03
-            );
-
-        if (solution.Count == 0)
-            return;
-
-        PathD largest =
-            solution[0];
-
-        double largestArea =
-            Mathf.Abs(
-                (float)Clipper.Area(largest)
-            );
-
-        foreach (PathD p in solution)
+        if (solution.Count > 0)
         {
-            double area =
-                Mathf.Abs(
-                    (float)Clipper.Area(p)
-                );
+            // 가장 면적이 큰 다각형을 메인 영토로 선택 (섬 방지)
+            PathD largestPath = GetLargestPath(solution);
 
+            List<Vector2> newPoints = new List<Vector2>();
+            foreach (PointD pd in largestPath)
+            {
+                newPoints.Add(new Vector2((float)pd.x, (float)pd.y));
+            }
+
+            polygonCollider.SetPath(0, newPoints.ToArray());
+            UpdateVisual();
+        }
+    }
+
+    private PathD GetLargestPath(PathsD paths)
+    {
+        PathD largest = paths[0];
+        double largestArea = System.Math.Abs(Clipper.Area(largest));
+        foreach (var path in paths)
+        {
+            double area = System.Math.Abs(Clipper.Area(path));
             if (area > largestArea)
             {
                 largestArea = area;
-                largest = p;
+                largest = path;
             }
         }
-
-        List<Vector2> finalPoints =
-            new List<Vector2>();
-
-        foreach (PointD p in largest)
-        {
-            finalPoints.Add(
-                new Vector2(
-                    (float)p.x - transform.position.x,
-                    (float)p.y - transform.position.y
-                )
-            );
-        }
-
-        polygonCollider.SetPath(
-            0,
-            finalPoints.ToArray()
-        );
-
-        UpdateVisual();
-    }
-
-    List<Vector2> BuildPolygon(
-        Vector2 exitPoint,
-        Vector2 enterPoint,
-        List<Vector3> trailPoints,
-        List<Vector2> boundary
-    )
-    {
-        List<Vector2> polygon =
-            new List<Vector2>();
-
-        AddPointIfFar(
-            polygon,
-            exitPoint
-        );
-
-        foreach (Vector3 p in trailPoints)
-        {
-            AddPointIfFar(
-                polygon,
-                new Vector2(p.x, p.y)
-            );
-        }
-
-        AddPointIfFar(
-            polygon,
-            enterPoint
-        );
-
-        foreach (Vector2 p in boundary)
-        {
-            AddPointIfFar(
-                polygon,
-                p
-            );
-        }
-
-        RemoveCollinearPoints(
-            polygon
-        );
-
-        return polygon;
-    }
-
-    void AddPointIfFar(
-        List<Vector2> points,
-        Vector2 point
-    )
-    {
-        if (points.Count == 0)
-        {
-            points.Add(point);
-            return;
-        }
-
-        float dist =
-            Vector2.Distance(
-                points[points.Count - 1],
-                point
-            );
-
-        if (dist > 0.02f)
-        {
-            points.Add(point);
-        }
-    }
-
-    void RemoveCollinearPoints(
-        List<Vector2> points
-    )
-    {
-        if (points.Count < 3)
-            return;
-
-        for (
-            int i = points.Count - 1;
-            i >= 0;
-            i--
-        )
-        {
-            Vector2 prev =
-                points[
-                    (i - 1 + points.Count)
-                    % points.Count
-                ];
-
-            Vector2 current =
-                points[i];
-
-            Vector2 next =
-                points[
-                    (i + 1)
-                    % points.Count
-                ];
-
-            Vector2 dir1 =
-                (current - prev).normalized;
-
-            Vector2 dir2 =
-                (next - current).normalized;
-
-            float dot =
-                Vector2.Dot(dir1, dir2);
-
-            if (dot > 0.999f)
-            {
-                points.RemoveAt(i);
-            }
-        }
-    }
-
-    int FindClosestEdgeIndex(Vector2[] polygon, Vector2 target)
-    {
-        int closestIndex = 0;
-
-        float closestDistance = Mathf.Infinity;
-
-        for (int i = 0; i < polygon.Length; i++)
-        {
-            Vector2 a = (Vector2)transform.position + polygon[i];
-
-            Vector2 b = (Vector2)transform.position + polygon[(i + 1) % polygon.Length];
-
-            Vector2 projected = GetClosestPointOnSegment(a, b, target);
-
-            float dist = (target - projected).sqrMagnitude;
-
-            if (dist < closestDistance)
-            {
-                closestDistance = dist;
-                closestIndex = i;
-            }
-        }
-
-        return closestIndex;
-    }
-
-    List<Vector2> GetClockwisePoints(
-        Vector2[] polygon,
-        int start,
-        int end
-    )
-    {
-        List<Vector2> result =
-            new List<Vector2>();
-
-        int index = start;
-
-        while (index != end)
-        {
-            result.Add(
-                (Vector2)transform.position
-                + polygon[index]
-            );
-
-            index =
-                (index + 1)
-                % polygon.Length;
-        }
-
-        result.Add(
-            (Vector2)transform.position
-            + polygon[end]
-        );
-
-        return result;
-    }
-
-    List<Vector2> GetCounterClockwisePoints(
-        Vector2[] polygon,
-        int start,
-        int end
-    )
-    {
-        List<Vector2> result =
-            new List<Vector2>();
-
-        int index = start;
-
-        while (index != end)
-        {
-            result.Add(
-                (Vector2)transform.position
-                + polygon[index]
-            );
-
-            index--;
-
-            if (index < 0)
-            {
-                index =
-                    polygon.Length - 1;
-            }
-        }
-
-        result.Add(
-            (Vector2)transform.position
-            + polygon[end]
-        );
-
-        return result;
-    }
-
-    float CalculateArea(
-        List<Vector2> polygon
-    )
-    {
-        float area = 0f;
-
-        for (int i = 0; i < polygon.Count; i++)
-        {
-            Vector2 current =
-                polygon[i];
-
-            Vector2 next =
-                polygon[
-                    (i + 1)
-                    % polygon.Count
-                ];
-
-            area +=
-                (
-                    current.x * next.y
-                    - next.x * current.y
-                );
-        }
-
-        return area * 0.5f;
-    }
-
-    public Vector2 GetClosestBoundaryPoint(
-        Vector2 worldPosition
-    )
-    {
-        Vector2[] points =
-            polygonCollider.GetPath(0);
-
-        Vector2 closestPoint =
-            Vector2.zero;
-
-        float closestDistance =
-            Mathf.Infinity;
-
-        for (int i = 0; i < points.Length; i++)
-        {
-            Vector2 a =
-                (Vector2)transform.position
-                + points[i];
-
-            Vector2 b =
-                (Vector2)transform.position
-                + points[
-                    (i + 1)
-                    % points.Length
-                ];
-
-            Vector2 projected =
-                GetClosestPointOnSegment(
-                    a,
-                    b,
-                    worldPosition
-                );
-
-            float dist =
-                (
-                    worldPosition
-                    - projected
-                ).sqrMagnitude;
-
-            if (dist < closestDistance)
-            {
-                closestDistance = dist;
-                closestPoint = projected;
-            }
-        }
-
-        return closestPoint;
-    }
-
-    Vector2 GetClosestPointOnSegment(
-        Vector2 a,
-        Vector2 b,
-        Vector2 point
-    )
-    {
-        Vector2 ab = b - a;
-
-        float t =
-            Vector2.Dot(
-                point - a,
-                ab
-            ) / ab.sqrMagnitude;
-
-        t = Mathf.Clamp01(t);
-
-        return a + ab * t;
+        return largest;
     }
 
     void UpdateVisual()
     {
-        Vector2[] points =
-            polygonCollider.GetPath(0);
+        Vector2[] points = polygonCollider.GetPath(0);
+        if (points.Length < 3) return;
 
-        if (points.Length < 3)
-            return;
-
-        Tess tess =
-            new Tess();
-
-        ContourVertex[] contour =
-            new ContourVertex[
-                points.Length
-            ];
+        Tess tess = new Tess();
+        ContourVertex[] contour = new ContourVertex[points.Length];
 
         for (int i = 0; i < points.Length; i++)
         {
-            contour[i].Position =
-                new Vec3(
-                    points[i].x,
-                    points[i].y,
-                    0
-                );
+            contour[i].Position = new Vec3(points[i].x, points[i].y, 0);
         }
 
-        tess.AddContour(
-            contour,
-            ContourOrientation.Clockwise
-        );
+        tess.AddContour(contour, ContourOrientation.Original);
+        tess.Tessellate(WindingRule.EvenOdd, ElementType.Polygons, 3);
 
-        tess.Tessellate(
-            WindingRule.NonZero,
-            ElementType.Polygons,
-            3
-        );
-
-        Mesh mesh =
-            new Mesh();
-
-        Vector3[] vertices =
-            new Vector3[
-                tess.Vertices.Length
-            ];
-
+        Vector3[] vertices = new Vector3[tess.Vertices.Length];
         for (int i = 0; i < tess.Vertices.Length; i++)
         {
-            vertices[i] =
-                new Vector3(
-                    tess.Vertices[i].Position.X,
-                    tess.Vertices[i].Position.Y,
-                    0
-                );
+            vertices[i] = new Vector3(tess.Vertices[i].Position.X, tess.Vertices[i].Position.Y, 0);
         }
 
-        int[] triangles =
-            new int[
-                tess.ElementCount * 3
-            ];
-
+        int[] triangles = new int[tess.ElementCount * 3];
         for (int i = 0; i < tess.ElementCount; i++)
         {
-            triangles[i * 3] =
-                tess.Elements[i * 3];
-
-            triangles[i * 3 + 1] =
-                tess.Elements[i * 3 + 1];
-
-            triangles[i * 3 + 2] =
-                tess.Elements[i * 3 + 2];
+            triangles[i * 3] = tess.Elements[i * 3];
+            triangles[i * 3 + 1] = tess.Elements[i * 3 + 1];
+            triangles[i * 3 + 2] = tess.Elements[i * 3 + 2];
         }
 
-        mesh.vertices =
-            vertices;
+        territoryMesh.Clear();
+        territoryMesh.vertices = vertices;
+        territoryMesh.triangles = triangles;
+        territoryMesh.RecalculateBounds();
+        territoryMesh.RecalculateNormals();
+    }
 
-        mesh.triangles =
-            triangles;
+    public Vector2 GetClosestBoundaryPoint(Vector2 worldPosition)
+    {
+        Vector2[] points = polygonCollider.GetPath(0);
+        Vector2 closestPoint = worldPosition;
+        float minDistance = float.PositiveInfinity;
 
-        mesh.RecalculateBounds();
+        for (int i = 0; i < points.Length; i++)
+        {
+            Vector2 a = points[i];
+            Vector2 b = points[(i + 1) % points.Length];
+            Vector2 projected = GetClosestPointOnSegment(a, b, worldPosition);
+            float dist = Vector2.Distance(worldPosition, projected);
 
-        mesh.RecalculateNormals();
+            if (dist < minDistance)
+            {
+                minDistance = dist;
+                closestPoint = projected;
+            }
+        }
+        return closestPoint;
+    }
 
-        meshFilter.mesh =
-            mesh;
+    private Vector2 GetClosestPointOnSegment(Vector2 a, Vector2 b, Vector2 p)
+    {
+        Vector2 ab = b - a;
+        float t = Vector2.Dot(p - a, ab) / ab.sqrMagnitude;
+        return a + ab * Mathf.Clamp01(t);
     }
 }

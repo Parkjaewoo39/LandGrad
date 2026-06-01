@@ -45,7 +45,7 @@ public class PlayerController : NetworkBehaviour
             RigidbodyInterpolation2D.Interpolate;
     }
 
-    void Start()
+    public override void Spawned()
     {
         SpawnManagers();
     }
@@ -147,33 +147,44 @@ public class PlayerController : NetworkBehaviour
             territoryCollider.ClosestPoint(
                 transform.position
             );
+        
+
     }
 
-    void OnTriggerStay2D(
-        Collider2D other
-    )
+    void OnTriggerStay2D(Collider2D other)
     {
-        if (
-            other.CompareTag("Territory")
-        )
+        if (other.CompareTag("Territory"))
         {
-            if (!isOutside)
-                return;
+            if (!isOutside) return;
 
             isOutside = false;
-
             waitingTrailStart = false;
-
             canHitOwnTrail = false;
 
-            Collider2D territoryCollider =
-    other.GetComponent<Collider2D>();
+            Collider2D territoryCollider = other.GetComponent<Collider2D>();
 
-            enterPoint =
-                territoryCollider.ClosestPoint(
-                    transform.position
-                );
+            // 1. 정확한 진입점 계산
+            enterPoint = territoryCollider.ClosestPoint(transform.position);
 
+            // 2. [핵심] 빈 공간 제거를 위한 보정 작업 (Padding)
+            if (trailManager.points.Count >= 2)
+            {
+                // 나갈 때: 첫 번째 트레일 점 방향을 구해서 exitPoint를 영토 안쪽으로 살짝 밀어 넣음
+                Vector2 exitDir = ((Vector2)trailManager.points[0] - exitPoint).normalized;
+                exitPoint = exitPoint - exitDir * 0.1f; // 0.1m 만큼 안쪽으로 연장
+
+                // 들어올 때: 마지막 트레일 점에서 enterPoint로 향하는 방향을 구함
+                Vector2 enterDir = (enterPoint - (Vector2)trailManager.points[trailManager.points.Count - 1]).normalized;
+
+                // 플레이어가 이동하던 방향 그대로 영토 안쪽으로 트레일 포인트를 강제로 하나 더 추가
+                Vector3 extraEnterPoint = (Vector3)(enterPoint + enterDir * 0.2f);
+                trailManager.points.Add(extraEnterPoint);
+
+                // enterPoint 자체도 영토 안쪽으로 살짝 밀어 넣음
+                enterPoint = enterPoint + enterDir * 0.1f;
+            }
+
+            // 3. 보정된 포인트들로 영토 빌드 요청
             territoryManager.BuildNewTerritory(
                 trailManager.points,
                 exitPoint,
@@ -181,34 +192,21 @@ public class PlayerController : NetworkBehaviour
             );
 
             trailManager.ClearTrail();
-
             return;
         }
 
-        TrailManager trail =
-            other.GetComponent<TrailManager>();
-
+        // ... 기존 trail 충돌(Die) 로직은 그대로 유지 ...
+        TrailManager trail = other.GetComponent<TrailManager>();
         if (trail == null)
             return;
-
-        if (
-            trail.owner == this
-            &&
-            isOutside
-            &&
-            canHitOwnTrail
-        )
-        {
-            Die();
-
-            return;
+        if (trail.owner == this && isOutside && canHitOwnTrail) 
+        { 
+            Die(); return;
         }
-
-        if (
-            trail.owner != this
-        )
-        {
-            Die();
+        if (trail.owner != this)
+        { 
+            trail.owner.KillPlayer();
+            return;
         }
     }
 
@@ -234,7 +232,15 @@ public class PlayerController : NetworkBehaviour
             .GetClosestBoundaryPoint(
                 transform.position
             );
+        Vector2 center =
+    territoryManager
+    .GetComponent<PolygonCollider2D>()
+    .bounds.center;
 
+        Vector2 inwardDir =
+            (center - respawnPosition).normalized;
+
+        respawnPosition += inwardDir * 0.3f;
         rb.linearVelocity =
             Vector2.zero;
 
@@ -245,5 +251,10 @@ public class PlayerController : NetworkBehaviour
 
         transform.position =
             respawnPosition;
+    }
+
+    void KillPlayer() 
+    {
+        Die();
     }
 }

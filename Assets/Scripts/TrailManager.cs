@@ -13,7 +13,7 @@ public class TrailManager : MonoBehaviour
     public Transform player;
     public PlayerController owner;
     [Header("Trail")]
-    public float minDistance = 0.12f;
+    public float minDistance = 0.05f;
 
     private LineRenderer lineRenderer;
 
@@ -76,8 +76,6 @@ public class TrailManager : MonoBehaviour
         points.Clear();
 
         lineRenderer.positionCount = 0;
-
-        points.Add(startPoint);
 
         points.Add(startPoint);
 
